@@ -1,0 +1,189 @@
+# Security Configuration for Secure Login System
+
+# Enable mod_rewrite
+RewriteEngine On
+
+# Security Headers
+<IfModule mod_headers.c>
+    # Prevent MIME type sniffing
+    Header always set X-Content-Type-Options nosniff
+    
+    # Enable XSS Protection
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Prevent clickjacking
+    Header always set X-Frame-Options "DENY"
+    
+    # HSTS (HTTP Strict Transport Security) - เปิดใช้งานเมื่อมี SSL
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    
+    # Content Security Policy
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' cdnjs.cloudflare.com; font-src 'self' cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self';"
+    
+    # Referrer Policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Feature Policy / Permissions Policy
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=()"
+    
+    # Remove server information
+    Header unset Server
+    Header unset X-Powered-By
+</IfModule>
+
+# Hide server signature
+ServerTokens Prod
+
+# Prevent access to sensitive files
+<Files ~ "^\.ht">
+    Order allow,deny
+    Deny from all
+    Satisfy All
+</Files>
+
+# Protect configuration files
+<FilesMatch "\.(ini|log|conf|sql|bak|backup|old|tmp|temp)$">
+    Order allow,deny
+    Deny from all
+    Satisfy All
+</FilesMatch>
+
+# Prevent access to PHP files in non-public directories
+<FilesMatch "^(config|classes|models|controllers)/">
+    Order allow,deny
+    Deny from all
+    Satisfy All
+</FilesMatch>
+
+# Directory protection
+Options -Indexes -ExecCGI -FollowSymLinks -MultiViews
+
+# Protect against brute force attacks
+<IfModule mod_evasive.c>
+    DOSHashTableSize    2048
+    DOSPageCount        10
+    DOSPageInterval     1
+    DOSPageSiteCount    50
+    DOSSiteInterval     1
+    DOSBlockingPeriod   600
+</IfModule>
+
+# Rate limiting (if mod_evasive is not available)
+<IfModule mod_limitipconn.c>
+    MaxConnPerIP 10
+</IfModule>
+
+# Compress static files for performance
+<IfModule mod_deflate.c>
+    # Compress HTML, CSS, JavaScript
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+</IfModule>
+
+# Cache static files
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/pdf "access plus 1 month"
+    ExpiresByType text/javascript "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType application/x-javascript "access plus 1 month"
+    ExpiresByType application/x-shockwave-flash "access plus 1 month"
+    ExpiresByType image/x-icon "access plus 1 year"
+    ExpiresDefault "access plus 2 days"
+</IfModule>
+
+# URL Rewriting for clean URLs
+RewriteEngine On
+
+# Redirect HTTP to HTTPS (uncomment when SSL is available)
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Redirect to login page if not authenticated (for protected pages)
+RewriteCond %{REQUEST_URI} ^/(dashboard|admin|user).*$
+RewriteCond %{HTTP_COOKIE} !SECURE_SESSION_ID
+RewriteRule ^(.*)$ /login.php [R=302,L]
+
+# Pretty URLs
+RewriteRule ^login/?$ public/login.php [L]
+RewriteRule ^dashboard/?$ public/dashboard.php [L]
+RewriteRule ^api/auth/(.+)/?$ controllers/AuthController.php?action=$1 [L,QSA]
+
+# Block common attack patterns
+RewriteCond %{QUERY_STRING} [a-zA-Z0-9_]=http:// [OR]
+RewriteCond %{QUERY_STRING} [a-zA-Z0-9_]=ftp:// [OR]
+RewriteCond %{QUERY_STRING} [a-zA-Z0-9_]=(\.\.//?)+ [OR]
+RewriteCond %{QUERY_STRING} [a-zA-Z0-9_]=/([a-z0-9_.]//?)+ [OR]
+RewriteCond %{QUERY_STRING} \=PHP[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} [OR]
+RewriteCond %{QUERY_STRING} (\.\./|\.\.\\) [OR]
+RewriteCond %{QUERY_STRING} ftp\: [OR]
+RewriteCond %{QUERY_STRING} http\: [OR]
+RewriteCond %{QUERY_STRING} https\: [OR]
+RewriteCond %{QUERY_STRING} \=\|w\| [OR]
+RewriteCond %{QUERY_STRING} ^(.*);jsessionid=[A-Za-z0-9]+\.jvm[0-9](\?(.*))?$
+RewriteRule .* - [F]
+
+# Block SQL injection attempts
+RewriteCond %{QUERY_STRING} union([^a-z]*select) [NC,OR]
+RewriteCond %{QUERY_STRING} union([^a-z]*all[^a-z]*select) [NC,OR]
+RewriteCond %{QUERY_STRING} \-[sdwu]* [NC,OR]
+RewriteCond %{QUERY_STRING} (;|<|>|'|"|\)|%0A|%0D|%27|%3C|%3E|%00) [NC,OR]
+RewriteCond %{QUERY_STRING} proc/self/environ [NC,OR]
+RewriteCond %{QUERY_STRING} mosConfig_[a-zA-Z_]{1,21}(=|\%3D) [NC,OR]
+RewriteCond %{QUERY_STRING} base64_(en|de)code\(.*\) [NC,OR]
+RewriteCond %{QUERY_STRING} (<|%3C)([^s]*s)+cript.*(>|%3E) [NC,OR]
+RewriteCond %{QUERY_STRING} GLOBALS(=|\[|\%[0-9A-Z]{0,2}) [NC,OR]
+RewriteCond %{QUERY_STRING} _REQUEST(=|\[|\%[0-9A-Z]{0,2}) [NC]
+RewriteRule .* - [F]
+
+# Block common malicious user agents
+RewriteCond %{HTTP_USER_AGENT} (nmap|nikto|wikto|sf|sqlmap|bsqlbf|w3af|acunetix|havij|appscan) [NC]
+RewriteRule .* - [F]
+
+# Block suspicious request methods
+RewriteCond %{REQUEST_METHOD} ^(TRACE|DELETE|TRACK) [NC]
+RewriteRule .* - [F]
+
+# Error pages
+ErrorDocument 400 /error/400.html
+ErrorDocument 401 /error/401.html  
+ErrorDocument 403 /error/403.html
+ErrorDocument 404 /error/404.html
+ErrorDocument 500 /error/500.html
+
+# Disable server signature
+ServerSignature Off
+
+# Limit file upload size (adjust as needed)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 10M
+    php_value max_execution_time 30
+    php_value max_input_time 30
+    php_value memory_limit 128M
+</IfModule>
+
+# Additional security for specific file types
+<FilesMatch "\.(php|php3|php4|php5|phtml)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+</FilesMatch>
+
+# Prevent hotlinking of images
+RewriteCond %{HTTP_REFERER} !^$
+RewriteCond %{HTTP_REFERER} !^http(s)?://(www\.)?yourdomain\.com [NC]
+RewriteCond %{REQUEST_URI} \.(jpg|jpeg|png|gif|bmp)$ [NC]
+RewriteRule \.(jpg|jpeg|png|gif|bmp)$ - [F]
