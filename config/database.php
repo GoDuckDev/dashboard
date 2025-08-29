@@ -10,9 +10,9 @@ class Database {
     
     // การตั้งค่าฐานข้อมูล - ควรเก็บใน environment variables ในสภาพแวดล้อมจริง
     private const DB_HOST = 'localhost';
-    private const DB_NAME = 'secure_login_system';
-    private const DB_USER = 'your_db_user';
-    private const DB_PASS = 'your_strong_password';
+    private const DB_NAME = 'dashboard';
+    private const DB_USER = 'dash';
+    private const DB_PASS = 'D@shb0ardPass';
     private const DB_CHARSET = 'utf8mb4';
     
     private function __construct() {

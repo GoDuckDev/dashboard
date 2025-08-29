@@ -6,7 +6,7 @@ require_once '../models/UserModel.php';
 // ตรวจสอบการล็อกอิน
 $sessionManager = new SessionManager();
 if (!$sessionManager->isLoggedIn()) {
-    header('Location: /login.php');
+    header('Location: login.php');
     exit;
 }
 

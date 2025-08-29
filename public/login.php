@@ -361,7 +361,7 @@ $csrfToken = SecurityHelper::generateCSRFToken();
                 };
                 
                 $.ajax({
-                    url: '/controllers/AuthController.php?action=login',
+                    url: '../controllers/AuthController.php?action=login',
                     type: 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(formData),
@@ -373,6 +373,60 @@ $csrfToken = SecurityHelper::generateCSRFToken();
                             // Redirect after delay
                             setTimeout(function() {
                                 window.location.href = response.redirect || '/dashboard.php';
+                            }, 1500);
+                        } else {
+                            showAlert('danger', response.error || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+                            resetButton();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        let message = 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
+                        
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            message = xhr.responseJSON.error;
+                        } else if (status === 'timeout') {
+                            message = 'หมดเวลาการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง';
+                        } else if (xhr.status === 0) {
+                            message = 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้';
+                        }
+                        
+                        showAlert('danger', message);
+                        resetButton();
+                    }
+                });
+            }
+
+            // Handle Login
+            function addUser() {
+                const $form = $('#loginForm');
+                const $btn = $('#loginBtn');
+                const $btnText = $btn.find('.btn-text');
+                const $loading = $btn.find('.loading');
+                
+                // Show loading state
+                $btn.prop('disabled', true);
+                $btnText.hide();
+                $loading.show();
+                
+                const formData = {
+                    username: $('#username').val(),
+                    password: $('#password').val(),
+                    csrf_token: $('#csrfToken').val()
+                };
+                
+                $.ajax({
+                    url: '../controllers/AuthController.php?action=login',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    timeout: 10000,
+                    success: function(response) {
+                        if (response.success) {
+                            showAlert('success', response.message);
+                            
+                            // Redirect after delay
+                            setTimeout(function() {
+                                window.location.href = response.redirect || 'dashboard.php';
                             }, 1500);
                         } else {
                             showAlert('danger', response.error || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');

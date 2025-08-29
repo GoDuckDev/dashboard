@@ -18,6 +18,179 @@ class AuthController {
     }
     
     /**
+     * จัดการการสมัครสมาชิก
+     */
+    public function register() {
+        // ตรวจสอบ method
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->sendResponse(['error' => 'Invalid request method'], 405);
+            return;
+        }
+        
+        // ตรวจสอบ Content-Type
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (strpos($contentType, 'application/json') === false) {
+            $this->sendResponse(['error' => 'Invalid content type'], 400);
+            return;
+        }
+        
+        // ดึงข้อมูลจาก request body
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        if (!$input) {
+            $this->sendResponse(['error' => 'Invalid JSON data'], 400);
+            return;
+        }
+        
+        // Sanitize input
+        $input = SecurityHelper::sanitizeInput($input);
+        
+        // ตรวจสอบ CSRF token
+        if (!isset($input['csrf_token']) || !SecurityHelper::validateCSRFToken($input['csrf_token'])) {
+            SecurityHelper::logSecurityEvent('csrf_token_invalid_register', ['ip' => SecurityHelper::getClientIP()]);
+            $this->sendResponse(['error' => 'Invalid security token'], 403);
+            return;
+        }
+        
+        // ตรวจสอบข้อมูลที่จำเป็น
+        $requiredFields = ['username', 'email', 'password', 'confirm_password', 'terms_accepted'];
+        foreach ($requiredFields as $field) {
+            if (empty($input[$field]) && $field !== 'terms_accepted') {
+                $this->sendResponse(['error' => 'All fields are required'], 400);
+                return;
+            }
+        }
+        
+        if (!$input['terms_accepted']) {
+            $this->sendResponse(['error' => 'You must accept the terms and conditions'], 400);
+            return;
+        }
+        
+        $username = $input['username'];
+        $email = $input['email'];
+        $password = $input['password'];
+        $confirmPassword = $input['confirm_password'];
+        
+        // ตรวจสอบ rate limiting สำหรับการสมัครสมาชิก
+        $clientIP = SecurityHelper::getClientIP();
+        if (!SecurityHelper::checkRateLimit('register_' . $clientIP, 3, 1800)) { // 3 attempts per 30 minutes
+            SecurityHelper::logSecurityEvent('rate_limit_exceeded', [
+                'type' => 'register',
+                'ip' => $clientIP,
+                'username' => $username
+            ]);
+            $this->sendResponse(['error' => 'Too many registration attempts. Please try again later.'], 429);
+            return;
+        }
+        
+        // Validation
+        if (!SecurityHelper::validateUsername($username)) {
+            $this->sendResponse(['error' => 'Username must be 3-50 characters long and contain only letters, numbers, underscore, and dash'], 400);
+            return;
+        }
+        
+        if (!SecurityHelper::validateEmail($email)) {
+            $this->sendResponse(['error' => 'Please enter a valid email address'], 400);
+            return;
+        }
+        
+        if (!SecurityHelper::validatePassword($password)) {
+            $this->sendResponse(['error' => 'Password must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters'], 400);
+            return;
+        }
+        
+        if ($password !== $confirmPassword) {
+            $this->sendResponse(['error' => 'Passwords do not match'], 400);
+            return;
+        }
+        
+        // พยายามสร้างบัญชี
+        $result = $this->userModel->createUser($username, $email, $password, 3); // role_id = 3 (user)
+        
+        if (isset($result['error'])) {
+            $this->sendResponse(['error' => $result['error']], 400);
+            return;
+        }
+        
+        if ($result['success']) {
+            SecurityHelper::logSecurityEvent('user_registered', [
+                'user_id' => $result['user_id'],
+                'username' => $username,
+                'email' => $email
+            ]);
+            
+            $this->sendResponse([
+                'success' => true,
+                'message' => 'Account created successfully! You can now log in.',
+                'user_id' => $result['user_id'],
+                'redirect' => '/login.php?registered=1'
+            ]);
+        } else {
+            $this->sendResponse(['error' => 'Failed to create account. Please try again.'], 500);
+        }
+    }
+    
+    /**
+     * ตรวจสอบว่า username มีอยู่แล้วหรือไม่
+     */
+    public function checkUsername() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->sendResponse(['error' => 'Invalid request method'], 405);
+            return;
+        }
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+        $username = SecurityHelper::sanitizeInput($input['username'] ?? '');
+        
+        if (empty($username)) {
+            $this->sendResponse(['available' => false, 'message' => 'Username is required']);
+            return;
+        }
+        
+        if (!SecurityHelper::validateUsername($username)) {
+            $this->sendResponse(['available' => false, 'message' => 'Invalid username format']);
+            return;
+        }
+        
+        $isAvailable = !$this->userModel->isUsernameExists($username);
+        
+        $this->sendResponse([
+            'available' => $isAvailable,
+            'message' => $isAvailable ? 'Username is available' : 'Username is already taken'
+        ]);
+    }
+    
+    /**
+     * ตรวจสอบว่า email มีอยู่แล้วหรือไม่
+     */
+    public function checkEmail() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->sendResponse(['error' => 'Invalid request method'], 405);
+            return;
+        }
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+        $email = SecurityHelper::sanitizeInput($input['email'] ?? '');
+        
+        if (empty($email)) {
+            $this->sendResponse(['available' => false, 'message' => 'Email is required']);
+            return;
+        }
+        
+        if (!SecurityHelper::validateEmail($email)) {
+            $this->sendResponse(['available' => false, 'message' => 'Invalid email format']);
+            return;
+        }
+        
+        $isAvailable = !$this->userModel->isEmailExists($email);
+        
+        $this->sendResponse([
+            'available' => $isAvailable,
+            'message' => $isAvailable ? 'Email is available' : 'Email is already registered'
+        ]);
+    }
+    
+    /**
      * จัดการการล็อกอิน
      */
     public function login() {
@@ -334,6 +507,15 @@ if (isset($_GET['action'])) {
             break;
         case 'sessions':
             $controller->getActiveSessions();
+            break;
+        case 'register':
+            $controller->register();
+            break;
+        case 'check-username':
+            $controller->checkUsername();
+            break;
+        case 'check-email':
+            $controller->checkEmail();
             break;
         default:
             http_response_code(404);

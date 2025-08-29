@@ -131,7 +131,7 @@ class UserModel extends BaseModel {
     /**
      * ตรวจสอบว่า username มีอยู่แล้วหรือไม่
      */
-    private function isUsernameExists($username) {
+    public function isUsernameExists($username) {
         $sql = "SELECT COUNT(*) as count FROM users WHERE username = ?";
         $result = $this->fetchOne($sql, [$username]);
         return $result['count'] > 0;
@@ -140,7 +140,7 @@ class UserModel extends BaseModel {
     /**
      * ตรวจสอบว่า email มีอยู่แล้วหรือไม่
      */
-    private function isEmailExists($email) {
+    public function isEmailExists($email) {
         $sql = "SELECT COUNT(*) as count FROM users WHERE email = ?";
         $result = $this->fetchOne($sql, [$email]);
         return $result['count'] > 0;
